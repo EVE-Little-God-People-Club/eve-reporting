@@ -1,0 +1,57 @@
+[package]
+name = "reporting"
+version = "0.1.0"
+edition = "2024"
+
+
+[dependencies]
+windows = { version = "0.62.2", features = [
+	"Graphics_Capture",
+	"Graphics_DirectX_Direct3D11",
+	"Graphics_DirectX",
+	"Security_Authorization_AppCapabilityAccess",
+	"Win32_Foundation",
+	"Win32_Graphics_Direct3D11",
+	"Win32_Graphics_Dxgi",
+	"Win32_Graphics_Gdi",
+	"Win32_System_WinRT",
+	"Win32_UI_WindowsAndMessaging",
+	"Win32_System_Com",
+	"Win32_System_LibraryLoader",
+	"Win32_Graphics_Dwm",
+	"Win32_System_WinRT_Graphics_Capture",
+	"UI",
+	"UI_WindowManagement",
+	"Win32_Graphics",
+	"Win32_Graphics_Direct3D12",
+	"Win32_System_WinRT_Direct3D11",
+	"Win32_Graphics_Direct3D",
+	"Win32_Graphics_Dxgi_Common",
+	"Win32_Security",
+	"System",
+	"Win32_System_WinRT_Graphics",
+	"Win32_System_WinRT_Graphics_Direct2D",
+] }
+winrt = "0.8.0"
+image = "0.25.8"
+tokio = { version = "1.49.0", features = ["full"] }
+serde = { version = "1.0.228", features = ["derive"] }
+serde_json = "1.0.145"
+anyhow = "1.0.100"
+windows-capture = "2.0.0-alpha.7"
+flume = "0.12.0"
+async-trait = "0.1.89"
+toml = "0.9.11+spec-1.1.0"
+rodio = "0.21.1"
+futures = "0.3.31"
+tracing = "0.1.44"
+tracing-subscriber = "0.3.22"
+
+
+
+[profile.release]
+lto = true
+opt-level = 3
+strip = true
+panic = "abort"
+codegen-units = 1
