@@ -1,10 +1,14 @@
+use crate::event::{Event, EventConsumer};
+use anyhow::anyhow;
 use rodio::{OutputStream, Sink};
 use std::fs::File;
 use std::path::{Path, PathBuf};
 use std::sync::Arc;
 use std::sync::atomic::{AtomicBool, Ordering};
 use tokio::fs::File as AFile;
+use tokio::sync::broadcast::Sender;
 
+#[derive(Clone)]
 pub struct VoicePlayer {
 	warn_voice_path: PathBuf,
 	reminder_voice_path: PathBuf,
@@ -65,6 +69,53 @@ impl VoicePlayer {
 		});
 	}
 }
+
+pub struct VoicePlayerController {
+	warn_voice_path: PathBuf,
+	reminder_voice_path: PathBuf,
+	event_sender: Option<Sender<Event>>,
+}
+
+impl VoicePlayerController {
+	pub fn new(warn_voice_path: &Path, reminder_voice_path: &Path) -> Self {
+		Self {
+			warn_voice_path: warn_voice_path.to_path_buf(),
+			reminder_voice_path: reminder_voice_path.to_path_buf(),
+			event_sender: None,
+		}
+	}
+}
+
+impl EventConsumer for VoicePlayerController {
+	fn inject(&mut self, sender: Sender<Event>) {
+		self.event_sender = Some(sender)
+	}
+	fn start(&self) -> anyhow::Result<()> {
+		if self.event_sender.is_none() {
+			return Err(anyhow!("There are no receiver"));
+		}
+		let mut receiver = self.event_sender.clone().unwrap().subscribe();
+		let warn_voice_path = self.warn_voice_path.clone();
+		let reminder_voice_path = self.reminder_voice_path.clone();
+
+		tokio::spawn(async move {
+			let voice_player = VoicePlayer::new(&warn_voice_path, &reminder_voice_path)
+				.await
+				.unwrap();
+			loop {
+				if let Ok(event) = receiver.recv().await {
+					let _ = match event {
+						Event::Warn { title: _ } => voice_player.play_warn().await,
+						Event::Reminder { title: _ } => voice_player.play_reminder().await,
+					};
+				}
+			}
+		});
+
+		Ok(())
+	}
+}
+
 #[cfg(test)]
 mod tests {
 	use crate::voice_player::VoicePlayer;

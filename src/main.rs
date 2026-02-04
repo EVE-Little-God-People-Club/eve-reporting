@@ -1,59 +1,54 @@
 use crate::config::Config;
 use crate::eve::EveClient;
 use crate::eve_monitor::EveMonitor;
+use crate::event::EventCenter;
 use crate::voice_player::VoicePlayer;
 use futures::StreamExt;
 use futures::stream::FuturesUnordered;
+use tokio::fs::File;
 use tokio::sync::broadcast;
 use tokio::sync::broadcast::error::RecvError;
 use tokio::task::JoinHandle;
-use tracing::{info, instrument, warn};
+use tracing::{error, info, instrument, warn};
+use tracing_subscriber::Layer;
 use tracing_subscriber::layer::SubscriberExt;
 use tracing_subscriber::util::SubscriberInitExt;
 
 mod config;
 mod eve;
 mod eve_monitor;
+mod event;
 mod image_checker;
+mod notification;
 mod voice_player;
 
 #[instrument]
 async fn entry_point() -> anyhow::Result<()> {
-	let config = Config::init().await?;
-	let voice_player = VoicePlayer::new(&config.warn_voice_path, &config.reminder_voice_path).await?;
-	let (mut warn_monitors, mut reminder_monitors): (Vec<_>, Vec<_>) = config
-		.chars
+	let config = Config::init()
+		.await
+		.inspect_err(|e| error!("reading config failed: {e}"))?;
+	let mut event_center = EventCenter::init();
+	config
+		.report_methods
 		.iter()
-		.map(|item| EveMonitor::new(item.clone()))
-		.filter_map(|monitor| monitor.ok())
-		.filter_map(|monitor| {
-			if monitor.start_capture().is_ok() {
-				Some(monitor)
-			} else {
-				None
-			}
-		})
-		.map(|monitor| {
-			(
-				monitor.subscribe_warn_points(),
-				monitor.subscribe_reminder(),
-			)
-		})
-		.unzip();
-
-	loop {
-		let mut warn_tasks = get_tasks(&mut warn_monitors);
-		let mut reminder_tasks = get_tasks(&mut reminder_monitors);
-
-		tokio::select! {
-			_ = warn_tasks.next() => {
-				let _ = voice_player.play_warn().await;
-			}
-			_ = reminder_tasks.next() => {
-				let _ = voice_player.play_reminder().await;
-			}
-		}
-	}
+		.filter_map(|cfg| cfg.to_consumer())
+		.for_each(|method| {
+			event_center
+				.add_consumer(method)
+				.inspect_err(|e| warn!("There is a error when start report method: {e}"))
+				.unwrap_or(())
+		});
+	config
+		.characters
+		.into_iter()
+		.filter_map(|cfg| EveMonitor::new(cfg).ok())
+		.for_each(|monitor| {
+			event_center
+				.add_producer(Box::new(monitor))
+				.inspect_err(|e| warn!("There is a error when start eve monitor: {e}"))
+				.unwrap_or(())
+		});
+	Ok(())
 }
 
 fn get_tasks(
@@ -105,15 +100,21 @@ async fn capture_only() -> anyhow::Result<()> {
 
 #[tokio::main]
 async fn main() -> anyhow::Result<()> {
-	tracing_subscriber::registry()
-		.with(tracing_subscriber::fmt::layer())
-		.init();
+	let subscriber = tracing_subscriber::registry().with(tracing_subscriber::fmt::layer());
 	let args = std::env::args().skip(1).collect::<Vec<_>>();
-	if let Some(first) = args.first()
-		&& first == &String::from("--capture-only")
-	{
-		capture_only().await
+	if args.contains(&"--log-file".to_string()) {
+		let file = File::create("reporting.log").await?.into_std().await;
+		let file_layer = tracing_subscriber::fmt::layer()
+			.with_writer(file)
+			.with_ansi(false);
+		subscriber.with(file_layer).init();
 	} else {
-		entry_point().await
+		subscriber.init();
 	}
+	if args.contains(&"--capture-only".to_string()) {
+		capture_only().await?;
+	} else {
+		entry_point().await?;
+	}
+	Ok(())
 }
