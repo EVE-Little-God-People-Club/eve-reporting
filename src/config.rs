@@ -1,6 +1,7 @@
 use crate::event::EventConsumer;
 use crate::image_checker::ImageChecker;
 use crate::notification::NotifyController;
+use crate::sse::SseServerController;
 use crate::voice_player::VoicePlayerController;
 use anyhow::anyhow;
 use image::RgbaImage;
@@ -168,7 +169,7 @@ impl ReportMethod {
 				reminder_voice_path,
 			))),
 			Self::Notification => Some(Box::new(NotifyController::new())),
-			_ => None,
+			Self::Sse { host, port } => Some(Box::new(SseServerController::new(*host, *port))),
 		}
 	}
 }

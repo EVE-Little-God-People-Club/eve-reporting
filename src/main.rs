@@ -5,6 +5,7 @@ use crate::event::EventCenter;
 use crate::voice_player::VoicePlayer;
 use futures::StreamExt;
 use futures::stream::FuturesUnordered;
+use std::time::Duration;
 use tokio::fs::File;
 use tokio::sync::broadcast;
 use tokio::sync::broadcast::error::RecvError;
@@ -20,6 +21,7 @@ mod eve_monitor;
 mod event;
 mod image_checker;
 mod notification;
+mod sse;
 mod voice_player;
 
 #[instrument]
@@ -48,14 +50,15 @@ async fn entry_point() -> anyhow::Result<()> {
 				.inspect_err(|e| warn!("There is a error when start eve monitor: {e}"))
 				.unwrap_or(())
 		});
-	Ok(())
-}
-
-fn get_tasks(
-	monitors: &mut [broadcast::Receiver<()>],
-) -> FuturesUnordered<impl Future<Output = Result<(), RecvError>>> {
-	let tasks: FuturesUnordered<_> = monitors.iter_mut().map(|monitor| monitor.recv()).collect();
-	tasks
+	if let Err(e) = tokio::signal::ctrl_c().await {
+		warn!("Failed to listen ctrl-c signal: {}", e);
+		loop {
+			tokio::time::sleep(Duration::from_hours(1)).await;
+		}
+	} else {
+		info!("EXIT SIGNAL BY USER");
+		std::process::exit(0);
+	}
 }
 
 #[instrument]

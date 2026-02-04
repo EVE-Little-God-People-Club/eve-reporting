@@ -1,7 +1,9 @@
 use async_trait::async_trait;
+use serde::{Deserialize, Serialize};
 use tokio::sync::broadcast::{self, Sender};
 
-#[derive(Clone, Debug)]
+#[derive(Clone, Debug, Serialize, Deserialize)]
+#[serde(tag = "type")]
 pub enum Event {
 	Warn { title: String },
 	Reminder { title: String },

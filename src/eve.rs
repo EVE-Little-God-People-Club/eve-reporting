@@ -67,7 +67,10 @@ impl GraphicsCaptureApiHandler for ClientCapture {
 		let image_opt: Option<RgbaImage> =
 			ImageBuffer::from_raw(frame_buffer.width(), frame_buffer.height(), buffer.to_vec());
 		if let Some(image) = image_opt {
-			let _ = self.sender.send(Arc::new(image));
+			let e = self.sender.send(Arc::new(image));
+			// if let Err(e) = e {
+			// 	println!("{e}")
+			// }
 		};
 		Ok(())
 	}
