@@ -7,18 +7,16 @@ use axum::response::sse::Event;
 use axum::routing::get;
 use futures::Stream;
 use futures::StreamExt;
-use std::net::Ipv4Addr;
-use tokio::sync::broadcast;
 use tokio::sync::broadcast::Sender;
 use tokio_stream::wrappers::BroadcastStream;
 use tracing::info;
 
 async fn sse_handler(
-	State(sender): State<broadcast::Sender<ReportEvent>>,
+	State(sender): State<Sender<ReportEvent>>,
 ) -> Sse<impl Stream<Item = Result<Event, axum::Error>>> {
 	let receiver = sender.subscribe();
 	let stream = BroadcastStream::new(receiver).map(|msg| match msg {
-		Ok(data) => Ok(Event::default().data(toml::to_string(&data).unwrap())),
+		Ok(data) => Ok(Event::default().data(serde_json::to_string(&data).unwrap())),
 		Err(_) => Err(axum::Error::new("broadcast error")),
 	});
 

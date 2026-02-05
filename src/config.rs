@@ -1,17 +1,21 @@
 use crate::event::EventConsumer;
 use crate::image_checker::ImageChecker;
 use crate::notification::NotifyController;
+use crate::reverse_websocket::ReverseWebsocketController;
 use crate::sse::SseServerController;
 use crate::voice_player::VoicePlayerController;
 use anyhow::anyhow;
 use image::RgbaImage;
 use serde::Deserialize;
+use std::fmt::Debug;
 use std::path::PathBuf;
 use std::str::FromStr;
+use std::time::Duration;
 use strum::EnumIs;
 use tokio::fs::File;
 use tokio::io::AsyncReadExt;
 use tracing::{info, instrument};
+use url::Url;
 
 pub type Point = [u32; 2];
 pub type Host = [u8; 4];
@@ -144,6 +148,25 @@ impl ReminderRegions {
 	}
 }
 
+fn deserialize_url<'de, D>(deserializer: D) -> Result<Url, D::Error>
+where
+	D: serde::Deserializer<'de>,
+{
+	let s = String::deserialize(deserializer)?;
+	match Url::parse(&s) {
+		Ok(url) => Ok(url),
+		Err(err) => Err(serde::de::Error::custom(err.to_string())),
+	}
+}
+
+fn default_try_forever() -> bool {
+	false
+}
+
+fn default_try_spacing() -> Duration {
+	Duration::from_secs(5)
+}
+
 #[derive(Debug, Deserialize, Clone, EnumIs)]
 #[serde(tag = "type")]
 pub enum ReportMethod {
@@ -156,6 +179,14 @@ pub enum ReportMethod {
 		port: Port,
 	},
 	Notification,
+	ReverseWebsocket {
+		#[serde(deserialize_with = "deserialize_url")]
+		url: Url,
+		#[serde(default = "default_try_forever")]
+		try_forever: bool,
+		#[serde(default = "default_try_spacing")]
+		try_spacing: Duration,
+	},
 }
 
 impl ReportMethod {
@@ -170,6 +201,15 @@ impl ReportMethod {
 			))),
 			Self::Notification => Some(Box::new(NotifyController::new())),
 			Self::Sse { host, port } => Some(Box::new(SseServerController::new(*host, *port))),
+			Self::ReverseWebsocket {
+				url,
+				try_forever,
+				try_spacing,
+			} => Some(Box::new(ReverseWebsocketController::new(
+				url.clone(),
+				*try_forever,
+				*try_spacing,
+			))),
 		}
 	}
 }
@@ -207,7 +247,7 @@ mod tests {
 	use tokio::test;
 
 	#[test]
-	async fn test() {
+	async fn example_config() {
 		let toml_str = r#"
 			[[report_methods]]
 			type = "Voice"
@@ -221,6 +261,15 @@ mod tests {
 			type = "Sse"
 			host = [127, 0, 0, 1]
 			port = 8080
+
+			[[report_methods]]
+			type = "ReverseWebsocket"
+			url = "wss://example.com"
+			try_forever = true
+			try_spacing = {
+				secs = 5,
+				nanos = 0
+			}
 
 			[[characters]]
 			title = "EVE - CHAR1"

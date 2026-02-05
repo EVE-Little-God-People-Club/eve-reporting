@@ -17,12 +17,12 @@ use windows_capture::settings::{
 use windows_capture::window::Window;
 
 pub fn find_all_windows_hwnd_and_title() -> anyhow::Result<Vec<(HWND, Option<String>)>> {
-	unsafe extern "system" fn enum_window_proc(hwnd: HWND, lparam: LPARAM) -> BOOL {
+	unsafe extern "system" fn enum_window_proc(hwnd: HWND, ptr: LPARAM) -> BOOL {
 		if unsafe { !IsWindowVisible(hwnd).as_bool() } {
 			return BOOL::from(true);
 		}
 
-		let windows = unsafe { &mut *(lparam.0 as *mut Vec<(HWND, Option<String>)>) };
+		let windows = unsafe { &mut *(ptr.0 as *mut Vec<(HWND, Option<String>)>) };
 
 		let mut buffer = [0u16; 512];
 		let len = unsafe { GetWindowTextW(hwnd, &mut buffer) };
@@ -67,10 +67,7 @@ impl GraphicsCaptureApiHandler for ClientCapture {
 		let image_opt: Option<RgbaImage> =
 			ImageBuffer::from_raw(frame_buffer.width(), frame_buffer.height(), buffer.to_vec());
 		if let Some(image) = image_opt {
-			let e = self.sender.send(Arc::new(image));
-			// if let Err(e) = e {
-			// 	println!("{e}")
-			// }
+			let _ = self.sender.send(Arc::new(image));
 		};
 		Ok(())
 	}

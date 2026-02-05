@@ -2,16 +2,10 @@ use crate::config::Config;
 use crate::eve::EveClient;
 use crate::eve_monitor::EveMonitor;
 use crate::event::EventCenter;
-use crate::voice_player::VoicePlayer;
-use futures::StreamExt;
-use futures::stream::FuturesUnordered;
 use std::time::Duration;
 use tokio::fs::File;
-use tokio::sync::broadcast;
-use tokio::sync::broadcast::error::RecvError;
 use tokio::task::JoinHandle;
 use tracing::{error, info, instrument, warn};
-use tracing_subscriber::Layer;
 use tracing_subscriber::layer::SubscriberExt;
 use tracing_subscriber::util::SubscriberInitExt;
 
@@ -21,6 +15,7 @@ mod eve_monitor;
 mod event;
 mod image_checker;
 mod notification;
+mod reverse_websocket;
 mod sse;
 mod voice_player;
 
