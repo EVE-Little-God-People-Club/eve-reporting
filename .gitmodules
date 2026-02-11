@@ -1,0 +1,6 @@
+[submodule "crates/onebot-reporting-bot/client/tauri-client"]
+	path = crates/onebot-reporting-bot/client/tauri-client
+	url = https://github.com/EVE-Little-God-People-Club/eve-reporting-client.git
+[submodule "client/tauri-client"]
+	path = client/tauri-client
+	url = https://github.com/EVE-Little-God-People-Club/eve-reporting-client.git

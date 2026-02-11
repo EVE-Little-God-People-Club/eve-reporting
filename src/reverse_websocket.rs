@@ -4,7 +4,7 @@ use futures::SinkExt;
 use std::time::Duration;
 use tokio::sync::broadcast::Sender;
 use tokio_tungstenite::tungstenite::Message;
-use tracing::warn;
+use tracing::{info, warn};
 use url::Url;
 
 pub struct ReverseWebsocketController {
@@ -40,8 +40,10 @@ impl EventConsumer for ReverseWebsocketController {
 		let try_spacing = self.try_spacing;
 		tokio::spawn(async move {
 			let task = async || {
+				info!("try to connect {}", url);
 				let mut receiver = sender.subscribe();
 				let (mut ws_stream, _) = tokio_tungstenite::connect_async(url.to_string()).await?;
+				info!("reverse websocket connect successful");
 				loop {
 					if let Ok(event) = receiver.recv().await {
 						match serde_json::to_string(&event) {

@@ -1,5 +1,6 @@
 use crate::config::{Host, Port};
 use crate::event::{Event as ReportEvent, EventConsumer};
+use crate::get_char_titles;
 use anyhow::anyhow;
 use axum::extract::State;
 use axum::response::Sse;
@@ -7,18 +8,27 @@ use axum::response::sse::Event;
 use axum::routing::get;
 use futures::Stream;
 use futures::StreamExt;
+use futures::stream;
 use tokio::sync::broadcast::Sender;
 use tokio_stream::wrappers::BroadcastStream;
+use tower_http::cors::{Any, CorsLayer};
 use tracing::info;
 
 async fn sse_handler(
 	State(sender): State<Sender<ReportEvent>>,
 ) -> Sse<impl Stream<Item = Result<Event, axum::Error>>> {
 	let receiver = sender.subscribe();
-	let stream = BroadcastStream::new(receiver).map(|msg| match msg {
+	let broadcast_stream = BroadcastStream::new(receiver).map(|msg| match msg {
 		Ok(data) => Ok(Event::default().data(serde_json::to_string(&data).unwrap())),
 		Err(_) => Err(axum::Error::new("broadcast error")),
 	});
+
+	let initial_event =
+		async move { Ok(Event::default().data(serde_json::to_string(&get_char_titles()).unwrap())) };
+
+	let stream = stream::once(initial_event).chain(broadcast_stream);
+
+	info!("create sse connection successful");
 
 	Sse::new(stream)
 		.keep_alive(axum::response::sse::KeepAlive::new().interval(std::time::Duration::from_secs(5)))
@@ -59,7 +69,13 @@ impl EventConsumer for SseServerController {
 			let listener = tokio::net::TcpListener::bind(&addr).await.unwrap();
 			let app = axum::Router::new()
 				.route("/events", get(sse_handler))
-				.with_state(sender);
+				.with_state(sender)
+				.layer(
+					CorsLayer::new()
+						.allow_origin(Any)
+						.allow_methods(Any)
+						.allow_headers(Any),
+				);
 			info!("SSE server run on {}", addr);
 			axum::serve(listener, app).await.unwrap();
 		});

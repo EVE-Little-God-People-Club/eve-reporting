@@ -14,7 +14,7 @@ use std::time::Duration;
 use strum::EnumIs;
 use tokio::fs::File;
 use tokio::io::AsyncReadExt;
-use tracing::{info, instrument};
+use tracing::{debug, info, instrument, trace};
 use url::Url;
 
 pub type Point = [u32; 2];
@@ -63,9 +63,13 @@ impl Iterator for PointIter {
 
 impl Region {
 	pub fn check_in_image(&self, image: &RgbaImage) -> bool {
-		self
-			.iter()
-			.any(|point| image.check_point_rgb_list(point, &self.rgb))
+		self.iter().any(|point| {
+			let result = image.check_point_rgb_list(point, &self.rgb);
+			if result {
+				trace!(?point, ?self.rgb, "find rgb");
+			}
+			result
+		})
 	}
 
 	pub fn iter(&self) -> PointIter {
@@ -132,6 +136,7 @@ pub struct ReminderRegions {
 
 impl ReminderRegions {
 	pub fn check_reminder(&self, image: &RgbaImage, state: &mut (bool, bool)) -> bool {
+		trace!(?state, "check reminder call");
 		if !state.0 && !state.1 && self.reminder_now_region.check_in_image(image) {
 			state.0 = true;
 			false
@@ -141,6 +146,7 @@ impl ReminderRegions {
 		} else if state.0 && state.1 && !self.reminder_enemy_region.check_in_image(image) {
 			state.0 = false;
 			state.1 = false;
+			debug!(level = "reminder", ?state);
 			true
 		} else {
 			false

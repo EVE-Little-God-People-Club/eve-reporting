@@ -2,10 +2,14 @@ use crate::config::Config;
 use crate::eve::EveClient;
 use crate::eve_monitor::EveMonitor;
 use crate::event::EventCenter;
+use std::sync::RwLock;
 use std::time::Duration;
+use time::UtcOffset;
 use tokio::fs::File;
 use tokio::task::JoinHandle;
 use tracing::{error, info, instrument, warn};
+use tracing_subscriber::filter::LevelFilter;
+use tracing_subscriber::fmt::time::{LocalTime, OffsetTime};
 use tracing_subscriber::layer::SubscriberExt;
 use tracing_subscriber::util::SubscriberInitExt;
 
@@ -19,11 +23,22 @@ mod reverse_websocket;
 mod sse;
 mod voice_player;
 
+static CHAR_TITLES: RwLock<Vec<String>> = RwLock::new(Vec::new());
+
+pub fn get_char_titles() -> Vec<String> {
+	let char_titles_lock = CHAR_TITLES.read().unwrap();
+	char_titles_lock.clone()
+}
+
 #[instrument]
 async fn entry_point() -> anyhow::Result<()> {
 	let config = Config::init()
 		.await
 		.inspect_err(|e| error!("reading config failed: {e}"))?;
+	config.characters.iter().for_each(|char| {
+		let mut char_titles = CHAR_TITLES.write().unwrap();
+		char_titles.push(char.title.clone());
+	});
 	let mut event_center = EventCenter::init();
 	config
 		.report_methods
@@ -98,13 +113,30 @@ async fn capture_only() -> anyhow::Result<()> {
 
 #[tokio::main]
 async fn main() -> anyhow::Result<()> {
-	let subscriber = tracing_subscriber::registry().with(tracing_subscriber::fmt::layer());
 	let args = std::env::args().skip(1).collect::<Vec<_>>();
+	let mut log_level = LevelFilter::INFO;
+
+	if args.contains(&"--log-error".to_string()) {
+		log_level = LevelFilter::ERROR;
+	} else if args.contains(&"--log-warn".to_string()) {
+		log_level = LevelFilter::WARN;
+	} else if args.contains(&"--log-debug".to_string()) {
+		log_level = LevelFilter::DEBUG;
+	} else if args.contains(&"--log-trace".to_string()) {
+		log_level = LevelFilter::TRACE;
+	}
+
+	let local_offset = UtcOffset::current_local_offset()?;
+
+	let subscriber = tracing_subscriber::registry()
+		.with(tracing_subscriber::fmt::layer().with_timer(LocalTime::rfc_3339()))
+		.with(log_level);
 	if args.contains(&"--log-file".to_string()) {
 		let file = File::create("reporting.log").await?.into_std().await;
 		let file_layer = tracing_subscriber::fmt::layer()
 			.with_writer(file)
-			.with_ansi(false);
+			.with_ansi(false)
+			.with_timer(LocalTime::rfc_3339());
 		subscriber.with(file_layer).init();
 	} else {
 		subscriber.init();
